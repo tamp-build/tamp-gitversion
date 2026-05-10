@@ -21,8 +21,15 @@ class Build : TampBuild
     [Solution] readonly Solution Solution = null!;
     [GitRepository] readonly GitRepository Git = null!;
 
-    [Secret("NuGet API key for nuget.org publishing", EnvironmentVariable = "NUGET_API_KEY")]
-    readonly Secret NuGetApiKey = null!;
+    // Tamp.Core 1.0.0's [Secret] attribute is declared but the resolver
+    // isn't wired up yet (ParameterBinder explicitly excludes secrets).
+    // Resolve from env directly until Tamp.Core 1.0.1 lands the
+    // proper SecretBinder. The Secret type still gives us redaction in
+    // any logged output the runner sees.
+    static readonly Secret? NuGetApiKey =
+        Environment.GetEnvironmentVariable("NUGET_API_KEY") is { Length: > 0 } v
+            ? new Secret("NuGet API key", v)
+            : null;
 
     AbsolutePath Artifacts => RootDirectory / "artifacts";
 
@@ -93,7 +100,7 @@ class Build : TampBuild
             .Select(p => DotNet.NuGetPush(s => s
                 .SetPackagePath(p)
                 .SetSource("https://api.nuget.org/v3/index.json")
-                .SetApiKey(NuGetApiKey)
+                .SetApiKey(NuGetApiKey!)
                 .SetSkipDuplicate(true))));
 
     Target Ci => _ => _
