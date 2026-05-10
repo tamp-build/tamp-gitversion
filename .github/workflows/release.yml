@@ -73,10 +73,28 @@ jobs:
       # dry_run is explicitly false. The Push target depends on Pack so
       # this step re-runs Compile / Test / Pack — a few extra seconds in
       # exchange for keeping the target graph dependency-honest.
+      #
+      # Secret-name fallback chain: the org secret was created as
+      # `tmap_nuget_api_key` (with typo); if a future renaming straightens
+      # it to `tamp_nuget_api_key` or the canonical `NUGET_API_KEY`, the
+      # workflow keeps working without edit.
+      - name: Diagnostics — secret presence check
+        if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
+        env:
+          NUGET_API_KEY: ${{ secrets.tmap_nuget_api_key || secrets.tamp_nuget_api_key || secrets.NUGET_API_KEY }}
+        run: |
+          if [ -n "$NUGET_API_KEY" ]; then
+            echo "NUGET_API_KEY is set (${#NUGET_API_KEY} chars)."
+          else
+            echo "::error::NUGET_API_KEY is empty. Org secret resolution failed."
+            echo "Tried: secrets.tmap_nuget_api_key, secrets.tamp_nuget_api_key, secrets.NUGET_API_KEY"
+            exit 1
+          fi
+
       - name: tamp Push
         if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
         env:
-          NUGET_API_KEY: ${{ secrets.tmap_nuget_api_key }}
+          NUGET_API_KEY: ${{ secrets.tmap_nuget_api_key || secrets.tamp_nuget_api_key || secrets.NUGET_API_KEY }}
         run: dotnet tamp Push
 
       - name: Dry-run summary
