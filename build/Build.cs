@@ -40,17 +40,17 @@ class Build : TampBuild
             Console.WriteLine($"  Branch:        {Git.Branch ?? "<detached>"}");
             Console.WriteLine($"  Commit:        {Git.Commit[..7]}");
             Console.WriteLine($"  Configuration: {Configuration}");
-            Console.WriteLine($"  Solution:      {Solution.Name} ({Solution.Projects.Count} project{(Solution.Projects.Count == 1 ? "" : "s")})");
-            Console.WriteLine($"  Local build:   {IsLocalBuild}");
         });
 
     Target Clean => _ => _
-        .TopLevel()
-        .Description("Delete bin/obj across the tree and the artifacts directory.")
         .Executes(() =>
         {
+            var buildDir = (RootDirectory / "build").Value;
             foreach (var d in RootDirectory.GlobDirectories("**/bin", "**/obj"))
+            {
+                if (d.Value.StartsWith(buildDir, StringComparison.Ordinal)) continue;
                 d.Delete();
+            }
             Artifacts.Delete();
         });
 
@@ -59,7 +59,6 @@ class Build : TampBuild
         .Executes(() => DotNet.Restore(s => s.SetProject(Solution.Path)));
 
     Target Compile => _ => _
-        .TopLevel()
         .DependsOn(nameof(Restore))
         .Description("dotnet build the solution.")
         .Executes(() => DotNet.Build(s => s
@@ -68,7 +67,6 @@ class Build : TampBuild
             .SetNoRestore(true)));
 
     Target Test => _ => _
-        .TopLevel()
         .DependsOn(nameof(Compile))
         .Description("Run the unit test suite (does NOT run integration tests — those need dotnet-gitversion installed).")
         .Executes(() => DotNet.Test(s => s
@@ -81,7 +79,6 @@ class Build : TampBuild
             .SetResultsDirectory(Artifacts / "test-results")));
 
     Target Pack => _ => _
-        .TopLevel()
         .DependsOn(nameof(Test))
         .Description("Pack the Tamp.GitVersion.V6 NuGet package into ./artifacts.")
         .Executes(() => DotNet.Pack(s =>
@@ -94,7 +91,6 @@ class Build : TampBuild
         }));
 
     Target Push => _ => _
-        .TopLevel()
         .DependsOn(nameof(Pack))
         .Description("Push every nupkg in ./artifacts to nuget.org. Driven by tag-triggered CI.")
         .Requires(() => NuGetApiKey != null)
@@ -106,7 +102,6 @@ class Build : TampBuild
                 .SetSkipDuplicate(true))));
 
     Target Ci => _ => _
-        .TopLevel()
         .DependsOn(nameof(Info), nameof(Clean), nameof(Pack))
         .Description("Full CI pipeline: print info, clean, restore, build, test, pack. Push is a separate target run on release tags only.");
 
@@ -155,7 +150,6 @@ class Build : TampBuild
         .Executes(() => Tamp.SonarScanner.V10.SonarScanner.End(SonarTool, s => s.SetToken(SonarToken)));
 
     Target Sonar => _ => _
-        .TopLevel()
         .DependsOn(nameof(SonarBegin), nameof(SonarEnd))
         .Description("End-to-end Sonar scan: Begin (before Compile) → Compile → Test → End. Requires SONAR_TOKEN.");
 

@@ -28,7 +28,11 @@ public static class GitVersion
         if (tool is null) throw new ArgumentNullException(nameof(tool));
         var s = new GitVersionSettings();
         configure?.Invoke(s);
+        return Plan(tool, s);
+    }
 
+    private static CommandPlan Plan(Tool tool, GitVersionSettings s)
+    {
         var args = new List<string>();
 
         if (!string.IsNullOrEmpty(s.TargetPath)) { args.Add("/targetpath"); args.Add(s.TargetPath!); }
@@ -85,4 +89,22 @@ public static class GitVersion
         GitVersionOutput.DotEnv => "dotenv",
         _ => throw new ArgumentOutOfRangeException(nameof(o), o, "Unknown output format."),
     };
+
+    // ---- Object-init overloads (0.1.1+, TAM-161) ----
+    // Two equivalent authoring styles; both produce identical CommandPlans. Fluent
+    // stays canonical in docs and `tamp init` templates; object-init available for
+    // consumers who prefer the C# initializer shape.
+    //
+    //     GitVersion.Run(GitVersionTool, new() { TargetPath = RootDirectory, ShowVariable = "SemVer" });
+    //
+    // is equivalent to:
+    //
+    //     GitVersion.Run(GitVersionTool, s => s.SetTargetPath(RootDirectory).SetShowVariable("SemVer"));
+
+    public static CommandPlan Run(Tool tool, GitVersionSettings settings)
+    {
+        if (tool is null) throw new ArgumentNullException(nameof(tool));
+        if (settings is null) throw new ArgumentNullException(nameof(settings));
+        return Plan(tool, settings);
+    }
 }
