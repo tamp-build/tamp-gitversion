@@ -155,19 +155,21 @@ public sealed class GitVersionIntegrationTests
         var result = Run(plan);
         Assert.Equal(0, result.ExitCode);
 
-        // BuildServer mode emits CI-specific markers (##teamcity[…],
-        // ##vso[…]) only when running under that CI. Locally GitVersion
-        // detects "LocalBuild" and skips emission. Either branch is
-        // valid — what we're confirming here is that the wrapper's
-        // /output buildserver flag was accepted (exit 0) and the run
-        // completed in BuildServer mode (the LocalBuild banner appears
-        // only in this output path).
+        // BuildServer mode emits CI-specific markers — different shapes per detected agent:
+        //   TeamCity        →  ##teamcity[…]
+        //   Azure DevOps    →  ##vso[…]
+        //   GitHub Actions  →  writes GitVersion_<Var> to $GITHUB_ENV / $GITHUB_OUTPUT,
+        //                      logs "Applicable build agent found: 'GitHubActions'"
+        //   Local / unknown →  "LocalBuild" banner
+        // Any of those confirms the wrapper's `/output buildserver` flag was accepted
+        // and the run engaged the BuildServer code path.
         var combined = result.StdoutText + "\n" + result.StderrText;
         Assert.True(
             combined.Contains("LocalBuild", StringComparison.Ordinal) ||
             combined.Contains("##teamcity", StringComparison.Ordinal) ||
             combined.Contains("##vso", StringComparison.Ordinal) ||
-            combined.Contains("GitVersion_SemVer", StringComparison.Ordinal),
-            "Expected one of LocalBuild / ##teamcity / ##vso / GitVersion_SemVer in output.");
+            combined.Contains("GitVersion_SemVer", StringComparison.Ordinal) ||
+            combined.Contains("GitHubActions", StringComparison.Ordinal),
+            "Expected one of LocalBuild / ##teamcity / ##vso / GitVersion_SemVer / GitHubActions in output.");
     }
 }
