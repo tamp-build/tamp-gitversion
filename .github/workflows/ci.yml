@@ -31,7 +31,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # GitVersion integration tests require full history to compute SemVer
+          # from tag distance. fetch-depth: 0 disables the default shallow clone.
+          fetch-depth: 0
 
       - name: Install supported .NET SDKs
         uses: actions/setup-dotnet@v4
