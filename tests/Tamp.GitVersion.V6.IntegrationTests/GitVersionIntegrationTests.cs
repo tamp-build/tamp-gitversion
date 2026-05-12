@@ -19,21 +19,50 @@ public sealed class GitVersionIntegrationTests
 
     private static Tool ResolveTool()
     {
-        var home = Environment.GetEnvironmentVariable("HOME") ?? "";
-        var p = Path.Combine(home, ".dotnet", "tools", "dotnet-gitversion");
-        if (!File.Exists(p))
-            throw new InvalidOperationException(
-                $"dotnet-gitversion not found at {p}. Install with: dotnet tool install -g GitVersion.Tool --version 6.*");
-        return new Tool(AbsolutePath.Create(p));
+        // Walk PATH first (covers `dotnet tool install -g` adding ~/.dotnet/tools to PATH on every OS).
+        var pathVar = Environment.GetEnvironmentVariable("PATH") ?? "";
+        var separator = OperatingSystem.IsWindows() ? ';' : ':';
+        var executable = OperatingSystem.IsWindows() ? "dotnet-gitversion.exe" : "dotnet-gitversion";
+        foreach (var dir in pathVar.Split(separator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = Path.Combine(dir, executable);
+            if (File.Exists(candidate)) return new Tool(AbsolutePath.Create(candidate));
+        }
+        // Fall back to ~/.dotnet/tools (HOME on POSIX, USERPROFILE on Windows).
+        var home = Environment.GetEnvironmentVariable("HOME")
+            ?? Environment.GetEnvironmentVariable("USERPROFILE")
+            ?? "";
+        if (!string.IsNullOrEmpty(home))
+        {
+            var p = Path.Combine(home, ".dotnet", "tools", executable);
+            if (File.Exists(p)) return new Tool(AbsolutePath.Create(p));
+        }
+        throw new InvalidOperationException(
+            "dotnet-gitversion not found on PATH or in ~/.dotnet/tools. Install with: dotnet tool install -g GitVersion.Tool --version 6.*");
     }
 
+    /// <summary>
+    /// Locates a git checkout to run GitVersion against. CI uses the runner's
+    /// own checkout root via <c>GITHUB_WORKSPACE</c>; local invocations walk
+    /// up from the test binary looking for a <c>.git</c> directory. The test
+    /// suite doesn't require the TAMP repo specifically — any git checkout
+    /// with a SemVer-tagged history works for the assertions.
+    /// </summary>
     private static string TampRepoRoot()
     {
-        var home = Environment.GetEnvironmentVariable("HOME") ?? "";
-        var path = Path.Combine(home, "repos", "tamp");
-        if (!Directory.Exists(Path.Combine(path, ".git")))
-            throw new InvalidOperationException($"Sibling tamp checkout not at {path}.");
-        return path;
+        var ws = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+        if (!string.IsNullOrEmpty(ws) && Directory.Exists(Path.Combine(ws, ".git")))
+            return ws;
+        var dir = AppContext.BaseDirectory;
+        while (!string.IsNullOrEmpty(dir))
+        {
+            if (Directory.Exists(Path.Combine(dir, ".git"))) return dir;
+            var parent = Path.GetDirectoryName(dir);
+            if (parent == dir || parent is null) break;
+            dir = parent;
+        }
+        throw new InvalidOperationException(
+            $"No git checkout found above '{AppContext.BaseDirectory}' or at $GITHUB_WORKSPACE.");
     }
 
     private CaptureResult Run(CommandPlan plan)

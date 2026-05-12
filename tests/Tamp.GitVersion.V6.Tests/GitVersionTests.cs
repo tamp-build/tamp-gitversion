@@ -28,8 +28,11 @@ public sealed class GitVersionTests
     [Fact]
     public void Run_Executable_Is_The_Tool_Path()
     {
-        var plan = GitVersion.Run(FakeTool());
-        Assert.Equal("/fake/dotnet-gitversion", plan.Executable);
+        // AbsolutePath normalizes per-OS (drive letter on Windows), so compare against
+        // the post-normalization value rather than a hardcoded POSIX shape.
+        var tool = FakeTool();
+        var plan = GitVersion.Run(tool);
+        Assert.Equal(tool.Executable.Value, plan.Executable);
     }
 
     [Fact]
