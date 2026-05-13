@@ -43,16 +43,8 @@ class Build : TampBuild
         });
 
     Target Clean => _ => _
-        .Executes(() =>
-        {
-            var buildDir = (RootDirectory / "build").Value;
-            foreach (var d in RootDirectory.GlobDirectories("**/bin", "**/obj"))
-            {
-                if (d.Value.StartsWith(buildDir, StringComparison.Ordinal)) continue;
-                d.Delete();
-            }
-            Artifacts.Delete();
-        });
+        .Description("Delete bin/obj and the artifacts directory.")
+        .Executes(() => CleanArtifacts());
 
     Target Restore => _ => _
         .Description("dotnet restore the solution. CI uses TampCoreMode=package so Tamp.Core comes from nuget.org.")
