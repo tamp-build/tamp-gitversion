@@ -10,7 +10,12 @@
     <PackageId>Tamp.GitVersion.V6</PackageId>
     <Description>Tamp wrapper for GitVersion 6.x — derive a SemVer product version from a GitFlow / GitHub-flow / trunk-based git repo. Wraps the dotnet-gitversion CLI.</Description>
     <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="$(TampCorePath)" Condition="'$(TampCoreMode)' == 'project'" />

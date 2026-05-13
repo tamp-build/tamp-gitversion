@@ -38,7 +38,40 @@ In `build/Build.csproj`:
 <PackageReference Include="Tamp.GitVersion.V6" />
 ```
 
-## Quick example
+## Minimal adoption snippet (0.2.0+) — `[GitVersion]` value-injection
+
+```csharp
+using Tamp;
+using Tamp.GitVersion.V6;
+
+class Build : TampBuild
+{
+    public static int Main(string[] args) => Execute<Build>(args);
+
+    [GitVersion] readonly GitVersionInfo Version = null!;
+    //  ↑ GitVersion 6.x runs once at bind time; result is typed + cached.
+    //    Default executable: dotnet-gitversion (then gitversion). Override
+    //    via [GitVersion(Executable = "...")] if needed.
+
+    Target Image => _ => _.Executes(() =>
+        Docker.Build(s => s
+            .SetTag($"myapp:{Version.SemVer}-{Version.ShortSha}")));
+}
+```
+
+`GitVersionInfo` carries the full GitVersion 6.x output schema: `Major` /
+`Minor` / `Patch`, `MajorMinorPatch`, `SemVer`, `FullSemVer`,
+`AssemblySemVer`, `InformationalVersion`, `BranchName` / `EscapedBranchName` /
+`Sha` / `ShortSha`, `PreReleaseTag` family, `CommitsSinceVersionSource`,
+`UncommittedChanges`, `CommitDate`, plus a `Raw` dictionary that captures
+any new fields the upstream CLI adds in patch versions.
+
+**This is the recommended shape for 0.2.0+ adopters.** Lower-level
+`GitVersion.Run(...)` CLI wrapper (below) stays available for adopters who
+need the JSON output as a typed `CommandPlan` (build-graph traceability,
+explicit working directory, etc).
+
+## Quick example — explicit CLI wrapper (lower-level)
 
 ```csharp
 using Tamp;
