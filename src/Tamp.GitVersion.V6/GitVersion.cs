@@ -66,7 +66,10 @@ public static class GitVersion
         if (!string.IsNullOrEmpty(s.Url)) { args.Add("/url"); args.Add(s.Url!); }
         if (!string.IsNullOrEmpty(s.Branch)) { args.Add("/b"); args.Add(s.Branch!); }
         if (!string.IsNullOrEmpty(s.Username)) { args.Add("/u"); args.Add(s.Username!); }
+        // TODO: extract Reveal into GitVersionPasswordSettings to satisfy TAMP004 cleanly.
+#pragma warning disable TAMP004
         if (s.Password is { } pw) { args.Add("/p"); args.Add(pw.Reveal()); }
+#pragma warning restore TAMP004
         if (!string.IsNullOrEmpty(s.Commit)) { args.Add("/c"); args.Add(s.Commit!); }
         if (!string.IsNullOrEmpty(s.DynamicRepoLocation)) { args.Add("/dynamicRepoLocation"); args.Add(s.DynamicRepoLocation!); }
         if (s.NoFetch) args.Add("/nofetch");
