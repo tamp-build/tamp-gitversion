@@ -1,13 +1,15 @@
 using Tamp;
 using Tamp.NetCli.V10;
 using Tamp.Telegram;
+using Tamp.Components;
+using Tamp.Components.NetCli.V10;
 
 /// <summary>
 /// tamp-gitversion's self-hosted build script. Drives the
 /// restore / build / test / pack / push pipeline through Tamp itself
 /// — full dogfood of the published Tamp.Core + Tamp.NetCli.V10.
 /// </summary>
-class Build : TampBuild
+class Build : TampBuild, IDotNetPack
 {
     public static int Main(string[] args) => Execute<Build>(args);
 
@@ -18,14 +20,10 @@ class Build : TampBuild
         TelegramBuildReporter.FromEnvironment();
 
     [Parameter("Build configuration")]
-    Configuration Configuration = IsLocalBuild ? Configuration.Debug : Configuration.Release;
+    public Configuration Configuration { get; set; } = IsLocalBuild ? Configuration.Debug : Configuration.Release;
 
-    [Parameter("Package version override (resolved from CI tag, e.g. v0.1.0 → 0.1.0)", EnvironmentVariable = "PACKAGE_VERSION")]
-#pragma warning disable CS0649 // Set by reflection via [Parameter] binding.
-    readonly string? Version;
-#pragma warning restore CS0649
 
-    [Solution] readonly Solution Solution = null!;
+    [Solution] public Solution Solution { get; set; } = null!;
     [GitRepository] readonly GitRepository Git = null!;
 
     // Tamp.Core 1.0.0's [Secret] attribute is declared but the resolver
@@ -40,6 +38,8 @@ class Build : TampBuild
 
     AbsolutePath Artifacts => RootDirectory / "artifacts";
 
+    public AbsolutePath ArtifactsDirectory => Artifacts;
+
     Target Info => _ => _
         .Description("Print build context (branch, commit, configuration) — useful at the top of CI logs.")
         .Executes(() =>
@@ -53,20 +53,8 @@ class Build : TampBuild
         .Description("Delete bin/obj and the artifacts directory.")
         .Executes(() => CleanArtifacts());
 
-    Target Restore => _ => _
-        .Description("dotnet restore the solution. CI uses TampCoreMode=package so Tamp.Core comes from nuget.org.")
-        .Executes(() => DotNet.Restore(s => s.SetProject(Solution.Path)));
-
-    Target Compile => _ => _
-        .DependsOn(nameof(Restore))
-        .Description("dotnet build the solution.")
-        .Executes(() => DotNet.Build(s => s
-            .SetProject(Solution.Path)
-            .SetConfiguration(Configuration)
-            .SetNoRestore(true)));
-
     Target Test => _ => _
-        .DependsOn(nameof(Compile))
+        .DependsOn(nameof(ICompile.Compile))
         .Description("Run the unit test suite (does NOT run integration tests — those need dotnet-gitversion installed).")
         .Executes(() => DotNet.Test(s => s
             .SetProject(RootDirectory / "tests" / "Tamp.GitVersion.V6.Tests" / "Tamp.GitVersion.V6.Tests.csproj")
@@ -77,20 +65,8 @@ class Build : TampBuild
             .SetSettings((RootDirectory / "build" / "coverlet.runsettings").Value)
             .SetResultsDirectory(Artifacts / "test-results")));
 
-    Target Pack => _ => _
-        .DependsOn(nameof(Test))
-        .Description("Pack the Tamp.GitVersion.V6 NuGet package into ./artifacts.")
-        .Executes(() => DotNet.Pack(s =>
-        {
-            s.SetProject(RootDirectory / "src" / "Tamp.GitVersion.V6" / "Tamp.GitVersion.V6.csproj");
-            s.SetConfiguration(Configuration);
-            s.SetNoBuild(true);
-            s.SetOutput(Artifacts);
-            if (!string.IsNullOrEmpty(Version)) s.SetProperty("Version", Version);
-        }));
-
     Target Push => _ => _
-        .DependsOn(nameof(Pack))
+        .DependsOn(nameof(IPack.Pack))
         .Description("Push every nupkg in ./artifacts to nuget.org. Driven by tag-triggered CI.")
         .Requires(() => NuGetApiKey != null)
         .Executes(() => Artifacts.GlobFiles("*.nupkg")
@@ -101,11 +77,11 @@ class Build : TampBuild
                 .SetSkipDuplicate(true))));
 
     Target Ci => _ => _
-        .DependsOn(nameof(Info), nameof(Clean), nameof(Pack))
+        .DependsOn(nameof(Info), nameof(Clean), nameof(Test), nameof(IPack.Pack))
         .Description("Full CI pipeline: print info, clean, restore, build, test, pack. Push is a separate target run on release tags only.");
 
     Target Default => _ => _
-        .DependsOn(nameof(Compile))
+        .DependsOn(nameof(ICompile.Compile))
         .Description("Local-developer default: restore + build the solution.");
 
     // ----- Sonar (TAM-17) -----
@@ -127,7 +103,7 @@ class Build : TampBuild
 
     Target SonarBegin => _ => _
         .Description("Initialize the SonarScanner pre-build phase.")
-        .Before(nameof(Compile))
+        .Before(nameof(ICompile.Compile))
         .Requires(() => SonarToken != null)
         .Executes(() => Tamp.SonarScanner.V10.SonarScanner.Begin(SonarTool, s =>
         {
